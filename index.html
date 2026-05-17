@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stock Manager</title>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif;}
@@ -58,7 +59,9 @@ table tr:hover td{background:rgba(255,255,255,0.04);}
 .btn-use{background:#ef4444;}.btn-use:hover{background:#dc2626;}
 .btn-edit{background:#3b82f6;}.btn-edit:hover{background:#2563eb;}
 .btn-del{background:#6b7280;}.btn-del:hover{background:#4b5563;}
-.toast{position:fixed;bottom:30px;right:30px;background:#1e293b;border:1px solid rgba(56,189,248,0.3);color:#38bdf8;padding:14px 22px;border-radius:14px;font-size:14px;font-weight:500;display:none;z-index:999;box-shadow:0 8px 30px rgba(0,0,0,0.4);}
+.toast{position:fixed;bottom:30px;right:30px;padding:14px 22px;border-radius:14px;font-size:14px;font-weight:500;display:none;z-index:999;box-shadow:0 8px 30px rgba(0,0,0,0.4);}
+.toast-info{background:#1e293b;border:1px solid rgba(56,189,248,0.3);color:#38bdf8;}
+.toast-alert{background:#2d1515;border:1px solid rgba(239,68,68,0.4);color:#f87171;}
 @media(max-width:950px){.grid{grid-template-columns:1fr;}.stats{grid-template-columns:1fr;}.topbar{flex-direction:column;}}
 </style>
 </head>
@@ -97,7 +100,7 @@ table tr:hover td{background:rgba(255,255,255,0.04);}
   </div>
   <div class="stats">
     <div class="stat-box"><h3>Total Produits</h3><p id="totalProducts">0</p></div>
-    <div class="stat-box"><h3>Stock Critique</h3><p id="criticalStock">0</p></div>
+    <div class="stat-box"><h3>⚠️ Stock Critique</h3><p id="criticalStock" style="color:#f87171">0</p></div>
     <div class="stat-box"><h3>Total Quantité</h3><p id="totalQty">0</p></div>
   </div>
   <div class="grid">
@@ -124,9 +127,13 @@ table tr:hover td{background:rgba(255,255,255,0.04);}
   </div>
 </div>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast toast-info" id="toast"></div>
 
 <script>
+const EMAILJS_PUBLIC_KEY="7Pc2GNF9CwjWZmN6P";
+const EMAILJS_SERVICE_ID="service_weac324";
+const EMAILJS_TEMPLATE_ID="template_obzy1r7";
+emailjs.init(EMAILJS_PUBLIC_KEY);
 const USERS={"admin":"admin123","Abdelaziz":"1234"};
 const DEFAULT_DATA=[
   {name:"motor",   pin:"1", case:"A1",rack:"R1",qty:10, desc:"Moteur DC 12V"},
@@ -142,6 +149,19 @@ const DEFAULT_DATA=[
 ];
 function loadData(){const s=localStorage.getItem("stockData");return s?JSON.parse(s):JSON.parse(JSON.stringify(DEFAULT_DATA));}
 function saveData(d){localStorage.setItem("stockData",JSON.stringify(d));}
+function sendAlertEmail(p){
+  emailjs.send(EMAILJS_SERVICE_ID,EMAILJS_TEMPLATE_ID,{
+    title:"⚠️ ALERTE STOCK CRITIQUE",
+    name:"Stock Manager",
+    product_name:p.name.toUpperCase(),
+    quantity:p.qty,
+    case:p.case,
+    rack:p.rack,
+    message:`⚠️ ALERTE STOCK CRITIQUE!\n\nProduit: ${p.name.toUpperCase()}\nQuantité restante: ${p.qty}\nCase: ${p.case} | Rack: ${p.rack}\n\nVeuillez réapprovisionner dès que possible!`,
+    email:"azizebouissoui763@gmail.com"
+  }).then(()=>showToast("📧 Email d'alerte envoyé !","alert"))
+    .catch(()=>showToast("❌ Erreur envoi email","alert"));
+}
 function doLogin(){
   const user=document.getElementById("inputUser").value.trim();
   const pass=document.getElementById("inputPass").value;
@@ -177,7 +197,7 @@ function renderTable(filter=""){
     const{cls,txt}=getBadge(p.qty);
     totalQty+=p.qty;if(p.qty<=5)critical++;
     const tr=document.createElement("tr");
-    tr.innerHTML=`<td><strong>${p.name}</strong></td><td>${p.pin}</td><td>${p.case}</td><td>${p.rack}</td><td><strong>${p.qty}</strong></td><td style="color:#94a3b8">${p.desc}</td><td><span class="badge ${cls}">${txt}</span></td><td><button class="action-btn btn-use" onclick="useProduct(${i})">💡</button><button class="action-btn btn-edit" onclick="editProduct(${i})">✏️</button><button class="action-btn btn-del" onclick="deleteProduct(${i})">🗑️</button></td>`;
+    tr.innerHTML=`<td><strong>${p.name}</strong></td><td>${p.pin}</td><td>${p.case}</td><td>${p.rack}</td><td><strong style="${p.qty<=5?'color:#f87171':p.qty<=20?'color:#facc15':'color:#4ade80'}">${p.qty}</strong></td><td style="color:#94a3b8">${p.desc}</td><td><span class="badge ${cls}">${txt}</span></td><td><button class="action-btn btn-use" onclick="useProduct(${i})">💡</button><button class="action-btn btn-edit" onclick="editProduct(${i})">✏️</button><button class="action-btn btn-del" onclick="deleteProduct(${i})">🗑️</button></td>`;
     tbody.appendChild(tr);
   });
   document.getElementById("totalProducts").innerText=data.length;
@@ -199,12 +219,18 @@ function saveProduct(){
   const data=loadData();
   if(idx>=0){data[idx]={name,pin,case:cas,rack,qty,desc};showToast("✅ Produit modifié !");}
   else{data.push({name,pin,case:cas,rack,qty,desc});showToast("✅ Produit ajouté !");}
-  saveData(data);clearForm();renderTable();
+  saveData(data);
+  if(qty<=5)sendAlertEmail({name,qty,case:cas,rack});
+  clearForm();renderTable();
 }
 function useProduct(i){
   const data=loadData();
-  if(data[i].qty>0){data[i].qty--;saveData(data);showToast("💡 LED PIN "+data[i].pin+" ON — Qté: "+data[i].qty);renderTable();}
-  else showToast("⚠️ Stock vide !");
+  if(data[i].qty>0){
+    data[i].qty--;saveData(data);
+    showToast("💡 LED PIN "+data[i].pin+" ON — Qté: "+data[i].qty);
+    if(data[i].qty<=5)sendAlertEmail(data[i]);
+    renderTable();
+  }else showToast("⚠️ Stock vide !","alert");
 }
 function editProduct(i){
   const p=loadData()[i];
@@ -220,16 +246,19 @@ function editProduct(i){
 }
 function deleteProduct(i){
   if(!confirm("Supprimer ce produit ?"))return;
-  const data=loadData();data.splice(i,1);saveData(data);showToast("🗑️ Supprimé");renderTable();
+  const data=loadData();data.splice(i,1);saveData(data);
+  showToast("🗑️ Supprimé");renderTable();
 }
 function clearForm(){
   ["fname","fpin","fcase","frack","fqty","fdesc"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("editIndex").value="-1";
   document.getElementById("formTitle").innerText="➕ Ajouter Produit";
 }
-function showToast(msg){
-  const t=document.getElementById("toast");t.innerText=msg;t.style.display="block";
-  setTimeout(()=>t.style.display="none",2500);
+function showToast(msg,type="info"){
+  const t=document.getElementById("toast");
+  t.className="toast "+(type==="alert"?"toast-alert":"toast-info");
+  t.innerText=msg;t.style.display="block";
+  setTimeout(()=>t.style.display="none",3000);
 }
 </script>
 </body>
